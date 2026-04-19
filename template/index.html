@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fake News Detector</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .card { background: #1a1d27; border-radius: 16px; padding: 2rem; width: 100%; max-width: 680px; border: 1px solid #2a2d3a; }
+    h1 { font-size: 24px; font-weight: 600; margin-bottom: 6px; color: #fff; }
+    p.sub { font-size: 14px; color: #888; margin-bottom: 1.5rem; }
+    textarea { width: 100%; background: #0f1117; border: 1px solid #2a2d3a; border-radius: 10px; padding: 12px; color: #e0e0e0; font-size: 15px; resize: vertical; min-height: 150px; font-family: inherit; }
+    textarea:focus { outline: none; border-color: #4f6ef7; }
+    .btn-row { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+    button.analyze { background: #4f6ef7; color: white; border: none; border-radius: 8px; padding: 10px 24px; font-size: 15px; cursor: pointer; font-family: inherit; font-weight: 500; }
+    button.analyze:hover { background: #3d5ce6; }
+    button.analyze:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.clear { background: transparent; color: #888; border: 1px solid #2a2d3a; border-radius: 8px; padding: 10px 18px; font-size: 14px; cursor: pointer; font-family: inherit; }
+    button.clear:hover { background: #2a2d3a; }
+    .result { margin-top: 1.5rem; background: #0f1117; border-radius: 12px; padding: 1.25rem; border: 1px solid #2a2d3a; display: none; }
+    .result.show { display: block; }
+    .verdict { display: flex; align-items: center; gap: 12px; margin-bottom: 1rem; }
+    .badge { font-size: 13px; font-weight: 600; padding: 5px 14px; border-radius: 6px; letter-spacing: 0.5px; }
+    .badge.FAKE { background: #3b1212; color: #f87171; }
+    .badge.REAL { background: #0f2d1a; color: #4ade80; }
+    .verdict-text { font-size: 18px; font-weight: 500; color: #fff; }
+    .conf-label { font-size: 13px; color: #888; margin-bottom: 6px; }
+    .bar-wrap { background: #2a2d3a; border-radius: 999px; height: 8px; overflow: hidden; }
+    .bar { height: 8px; border-radius: 999px; width: 0%; transition: width 0.7s ease; }
+    .bar.FAKE { background: #f87171; }
+    .bar.REAL { background: #4ade80; }
+    .conf-val { font-size: 14px; font-weight: 500; margin-top: 6px; color: #fff; }
+    .samples { margin-top: 1rem; }
+    .samples p { font-size: 12px; color: #666; margin-bottom: 6px; }
+    .sample-btn { background: transparent; border: 1px solid #2a2d3a; border-radius: 6px; padding: 5px 12px; font-size: 12px; color: #888; cursor: pointer; margin-right: 6px; margin-bottom: 6px; font-family: inherit; }
+    .sample-btn:hover { background: #2a2d3a; color: #ccc; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Fake News Detector</h1>
+    <p class="sub">Paste any news article or headline to check if it's real or fake</p>
+
+    <textarea id="newsInput" placeholder="Paste your news article or headline here..."></textarea>
+
+    <div class="samples">
+      <p>Try a sample:</p>
+      <button class="sample-btn" onclick="loadSample('fake')">Fake: Election fraud claim</button>
+      <button class="sample-btn" onclick="loadSample('real')">Real: Science news</button>
+    </div>
+
+    <div class="btn-row">
+      <button class="analyze" id="analyzeBtn" onclick="analyze()">Analyze</button>
+      <button class="clear" onclick="clearAll()">Clear</button>
+    </div>
+
+    <div class="result" id="result">
+      <div class="verdict">
+        <span class="badge" id="badge">FAKE</span>
+        <span class="verdict-text" id="verdictText">Likely misinformation</span>
+      </div>
+      <p class="conf-label">Confidence score</p>
+      <div class="bar-wrap">
+        <div class="bar" id="bar"></div>
+      </div>
+      <p class="conf-val" id="confVal">—</p>
+    </div>
+  </div>
+
+  <script>
+    const samples = {
+      fake: "BREAKING: Thousands of ballots found dumped in a river! The election was stolen and mainstream media is covering it up. Share before they delete this!",
+      real: "Scientists at MIT published findings in Nature showing a new mRNA vaccine demonstrated 91% efficacy in Phase 3 trials involving 42,000 participants across 6 countries."
+    };
+
+    function loadSample(key) {
+      document.getElementById('newsInput').value = samples[key];
+      document.getElementById('result').classList.remove('show');
+    }
+
+    function clearAll() {
+      document.getElementById('newsInput').value = '';
+      document.getElementById('result').classList.remove('show');
+    }
+
+    async function analyze() {
+      const text = document.getElementById('newsInput').value.trim();
+      if (!text) { alert('Please enter some text!'); return; }
+
+      const btn = document.getElementById('analyzeBtn');
+      btn.disabled = true;
+      btn.textContent = 'Analyzing...';
+
+      try {
+        const res = await fetch('/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+        const data = await res.json();
+
+        const label = data.label;
+        const conf = data.confidence;
+
+        document.getElementById('badge').textContent = label;
+        document.getElementById('badge').className = 'badge ' + label;
+        document.getElementById('verdictText').textContent = label === 'FAKE' ? 'Likely misinformation' : 'Appears credible';
+        document.getElementById('bar').className = 'bar ' + label;
+        document.getElementById('confVal').textContent = conf.toFixed(1) + '% confident';
+        document.getElementById('result').classList.add('show');
+        setTimeout(() => { document.getElementById('bar').style.width = conf + '%'; }, 50);
+
+      } catch(e) {
+        alert('Error connecting to server. Make sure the backend is running.');
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Analyze';
+    }
+  </script>
+</body>
+</html>
